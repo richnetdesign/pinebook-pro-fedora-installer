@@ -46,7 +46,7 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # Sanity checks for dependencies
-declare -a DEPENDNECIES=("sed" "rsync" "git" "parted" "systemd-nspawn" "wget" "dialog" "bsdtar" "openssl" "awk" "mkfs.vfat")
+declare -a DEPENDNECIES=("sed" "rsync" "git" "fdisk" "systemd-nspawn" "wget" "dialog" "bsdtar" "openssl" "awk" "mkfs.vfat")
 
 for i in "${DEPENDNECIES[@]}"; do
   if ! [[ -f "/bin/$i" || -f "/sbin/$i" || -f "/usr/bin/$i" || -f "/usr/sbin/$i" ]] ; then
@@ -123,14 +123,18 @@ prepare_media() {
       wget -q --show-progress --progress=bar:force:noscroll $FEDORAURL
     fi
 
-    info "Extracting $ARCH rootfs..."
+    info "Extracting Manjaro rootfs..."
     mkdir -p $TMPDIR/manjaro 1> /dev/null 2>&1
     bsdtar -xpf $TMPDIR/Manjaro-ARM-$ARCH-latest.tar.gz -C $TMPDIR/manjaro
     rm -rf $TMPDIR/Manjaro-ARM-$ARCH-latest.tar.gz 1> /dev/null 2>&1
 
     info "Extracting Fedora rootfs..."
     mkdir -p $TMPDIR/fedora 1> /dev/null 2>&1
-    bsdtar -xpf $TMPDIR/$FEDORARAW -C $TMPDIR/fedora
+    bsdtar -xpf $TMPDIR/$FEDORARAW --strip-components=1 -C $TMPDIR/fedora
+    bsdtar -xpf $TMPDIR/fedora/layer.tar -C $TMPDIR/fedora
+    rm -f $TMPDIR/fedora/layer.tar 1> /dev/null 2>&1
+    rm -f $TMPDIR/fedora/json 1> /dev/null 2>&1
+    rm -f $TMPDIR/fedora/VERSION 1> /dev/null 2>&1
     rm -rf $TMPDIR/$FEDORARAW 1> /dev/null 2>&1
     
 }
@@ -153,7 +157,7 @@ manjaro_install() {
 
 install_fedora() {
     msg "Install Fedora..."
-    info "Set install type to Fedora Workstation..."
+    info "Install type is Fedora Workstation..."
     $NSPAWN $TMPDIR/fedora dnf install fedora-release-workstation --allowerasing -y
     info "Upgrade base install..."
     $NSPAWN $TMPDIR/fedora dnf upgrade -y --refresh
@@ -166,6 +170,7 @@ install_fedora() {
     info "Enable services from extra packages..."
     $NSPAWN $TMPDIR/fedora systemctl enable haveged.service
     $NSPAWN $TMPDIR/fedora systemctl enable acpid.service
+    $NSPAWN $TMPDIR/fedora systemctl set-default graphical.target
 
     info "Clear dnf cache..."
     $NSPAWN $TMPDIR/fedora dnf clean all 1> /dev/null 2>&1
@@ -257,12 +262,12 @@ partition_card () {
     # umount SD card
     umount ${SDCARD}$* 1> /dev/null 2>&1
 
-    info "Create partitions..."
+    info "Create partitions on $DEV_NAME..."
     #Clear first 32mb
     dd if=/dev/zero of=${SDCARD} bs=1M count=32 1> /dev/null 2>&1
 
     #partition with efi, boot and root
-    echo -e "g\nn\n1\n32768\n+512\nt\n1\nn\n2\n\n+1G\nn\n3\n\n\nx\nA\n2\nr\nw" | fdisk ${SDCARD}
+    echo -e "g\nn\n1\n32768\n+512\nt\n1\nn\n2\n\n+1G\nn\n3\n\n\nx\nA\n2\nr\nw" | fdisk ${SDCARD} 1> /dev/null 2>&1
 
 }
 
