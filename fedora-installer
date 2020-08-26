@@ -189,15 +189,19 @@ configure_fedora() {
 
     info "Update extlinux.conf and fstab with UUID..."
     # Get UUID
-    EFIUUID=$(blkid -s UUID -o value "${SDCARD}${SDDEV}4")
-    BOOTUUID=$(blkid -s UUID -o value "${SDCARD}${SDDEV}5")
-    ROOTUUID=$(blkid -s UUID -o value "${SDCARD}${SDDEV}6")
+    EFIUUID=$(blkid -s UUID -o value "${SDCARD}${SDDEV}1")
+    BOOTUUID=$(blkid -s UUID -o value "${SDCARD}${SDDEV}2")
+    ROOTUUID=$(blkid -s UUID -o value "${SDCARD}${SDDEV}3")
     # Edit extlinux.conf
     sed -i -e "s!APPEND.*!APPEND initrd=/initramfs-linux.img console=tty1 console=ttyS2,1500000 root=UUID=${ROOTUUID} rw rootwait video=eDP-1:1920x1080@60 video=HDMI-A-1:1920x1080@60!g" ${TMPDIR}/fedora/boot/extlinux/extlinux.conf
     # Edit fstab
     echo "UUID=${ROOTUUID}  /   ext4    defaults        0       1"  > $TMPDIR/fedora/etc/fstab
     echo "UUID=${BOOTUUID}  /boot   ext4    defaults        0       2" >> $TMPDIR/fedora/etc/fstab
     echo "UUID=${EFIUUID}  /boot/efi   vfat    defaults        0       2"  >> $TMPDIR/fedora/etc/fstab
+
+    # Edit grub parameters
+    sed -i "s|GRUB_CMDLINE_LINUX=\"|& console=tty1 console=ttyS2,1500000n8 video=eDP-1:1920x1080@60 video=HDMI-A-1:1920x1080@60 |" $TMPDIR/fedora/etc/default/grub
+    sed -i -e "s!kernelopts=.*!kernelopts=root=UUID=${ROOTUUID} ro cma=256MB console=tty1 console=ttyS2,1500000n8 video=eDP-1:1920x1080@60 video=HDMI-A-1:1920x1080@60!g" $TMPDIR/fedora/boot/efi/EFI/fedora/grubenv
     
     info "Set timezone..."
     $NSPAWN $TMPDIR/fedora ln -sf /usr/share/zoneinfo/"$TIMEZONE" /etc/localtime 1> /dev/null 2>&1
@@ -263,34 +267,33 @@ partition_card () {
     dd if=/dev/zero of=${SDCARD} bs=1M count=32 1> /dev/null 2>&1
 
     #partition with efi, boot and root
-    echo -e "label:gpt\nunit:sectors\nfirst-lba:64" | sfdisk ${SDCARD} 1> /dev/null 2>&1
-    echo -e "n\n1\n64\n+16319\nn\n2\n16384\n+8191\nn\n3\n24576\n+8191\nn\n4\n32768\n+512\nn\n5\n\n+1G\nn\n6\n\n\nt\n1\n27\nt\n2\n27\nt\n3\n27\nt\n4\n1\nx\nR\n1\nR\n2\nR\n3\nA\n4\nr\nw" | fdisk ${SDCARD} 1> /dev/null 2>&1
+    echo -e "g\nn\n1\n32768\n+512\nt\n1\nn\n2\n\n+1G\nn\n3\n\n\nx\nA\n2\nr\nw" | fdisk ${SDCARD} 1> /dev/null 2>&1
 
 }
 
 format_card () {
 
     info "Format partitions on $DEV_NAME"
-        mkfs.vfat -F 32 "${SDCARD}${SDDEV}4" -n EFI 1> /dev/null 2>&1
-        mkfs.ext4 -F -O ^metadata_csum,^64bit "${SDCARD}${SDDEV}5" -L "${DEV_NAME}-boot" 1> /dev/null 2>&1
-        mkfs.ext4 -F -O ^metadata_csum,^64bit "${SDCARD}${SDDEV}6" -L "${DEV_NAME}-root" 1> /dev/null 2>&1
+        mkfs.vfat -F 32 "${SDCARD}${SDDEV}1" -n EFI 1> /dev/null 2>&1
+        mkfs.ext4 -F -O ^metadata_csum,^64bit "${SDCARD}${SDDEV}2" -L "${DEV_NAME}-boot" 1> /dev/null 2>&1
+        mkfs.ext4 -F -O ^metadata_csum,^64bit "${SDCARD}${SDDEV}3" -L "${DEV_NAME}-root" 1> /dev/null 2>&1
 
         mkdir -p $TMPDIR/fedora
-        mount ${SDCARD}${SDDEV}4 $TMPDIR/fedora
+        mount ${SDCARD}${SDDEV}3 $TMPDIR/fedora
         sleep 1
         mkdir -p $TMPDIR/fedora/boot
-        mount ${SDCARD}${SDDEV}5 $TMPDIR/fedora/boot
+        mount ${SDCARD}${SDDEV}2 $TMPDIR/fedora/boot
         sleep 1
         mkdir -p $TMPDIR/fedora/boot/efi
-        mount ${SDCARD}${SDDEV}6 $TMPDIR/fedora/boot/efi
+        mount ${SDCARD}${SDDEV}1 $TMPDIR/fedora/boot/efi
 
 }
 
 cleanup () {
     msg "Writing bootloader and cleaning up after install..."
     # Flash bootloader
-    dd if=$TMPDIR/fedora/boot/idbloader.img of=${SDCARD}${SDDEV}1 bs=4096 1> /dev/null 2>&1
-    dd if=$TMPDIR/fedora/boot/u-boot.itb of=${SDCARD}${SDDEV}2 bs=4096 1> /dev/null 2>&1
+    dd if=$TMPDIR/fedora/boot/idbloader.img of=${SDCARD} seek=64 conv=notrunc,fsync 1> /dev/null 2>&1
+    dd if=$TMPDIR/fedora/boot/u-boot.itb of=${SDCARD} seek=16384 conv=notrunc,fsync 1> /dev/null 2>&1
     	
     #clean up
         umount $TMPDIR/fedora/boot/efi
