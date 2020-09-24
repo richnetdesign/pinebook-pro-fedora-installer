@@ -267,7 +267,7 @@ partition_card () {
     dd if=/dev/zero of=${SDCARD} bs=1M count=32 1> /dev/null 2>&1
 
     #partition with efi, boot and root
-    echo -e "g\nn\n1\n32768\n+512\nt\n1\nn\n2\n\n+1G\nn\n3\n\n\nx\nA\n2\nr\nw" | fdisk ${SDCARD} 1> /dev/null 2>&1
+    echo -e "g\nn\n1\n32768\n+512M\nt\n1\nn\n2\n\n+1G\nn\n3\n\n\nx\nA\n2\nr\nw" | fdisk ${SDCARD} 1> /dev/null 2>&1
 
 }
 
