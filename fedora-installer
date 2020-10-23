@@ -4,9 +4,12 @@
 #       Version 3.0
 # *****************************
 
-# Change download url and raw filename to your liking
+# Add extra packages space separated list
+DNFEXTRA=
+
+# Fedora image read url as parameter
 FEDORAURL=${1:-"https://download.fedoraproject.org/pub/fedora/linux/releases/32/Container/aarch64/images/Fedora-Container-Base-32-1.6.aarch64.tar.xz"}
-FEDORARAW=$(echo $FEDORAURL | grep -Po '[^\/]+$')
+FEDORARAW=$(echo "$FEDORAURL" | grep -Po '[^\/]+$')
 
 # Set globals
 TMPDIR=/var/tmp/fedora-installer
@@ -120,7 +123,7 @@ prepare_media() {
 
     if [ ! -f "$FEDORARAW" ]; then
     info "Downloading Fedora Image..."
-      wget -q --show-progress --progress=bar:force:noscroll $FEDORAURL
+      wget -q --show-progress --progress=bar:force:noscroll "$FEDORAURL"
     fi
 
     info "Extracting Manjaro rootfs..."
@@ -130,7 +133,7 @@ prepare_media() {
 
     info "Extracting Fedora rootfs..."
     mkdir -p $TMPDIR/fedora 1> /dev/null 2>&1
-    bsdtar -xpf $TMPDIR/$FEDORARAW --strip-components=1 -C $TMPDIR/fedora
+    bsdtar -xpf $TMPDIR/"$FEDORARAW" --strip-components=1 -C $TMPDIR/fedora
     bsdtar -xpf $TMPDIR/fedora/layer.tar -C $TMPDIR/fedora
     rm -f $TMPDIR/fedora/layer.tar 1> /dev/null 2>&1
     rm -f $TMPDIR/fedora/json 1> /dev/null 2>&1
@@ -165,7 +168,7 @@ install_fedora() {
     $NSPAWN $TMPDIR/fedora dnf group install "Fedora Workstation" -y
 
     info "Install extra packages..."
-    $NSPAWN $TMPDIR/fedora dnf install -y haveged acpid
+    $NSPAWN $TMPDIR/fedora dnf install -y haveged acpid "${DNFEXTRA}" || { print "Something is wrong with list of packages to install; exiting"; exit 2; }
 
     info "Enable services from extra packages..."
     $NSPAWN $TMPDIR/fedora systemctl enable haveged.service
