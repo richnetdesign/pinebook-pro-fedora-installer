@@ -1,6 +1,6 @@
 screen_color = (white,black,off)
 dialog_color = (white,black,off)
-title_color = (cyan,black,on)
+title_color = (blue,black,on)
 border_color = dialog_color
 shadow_color = (black,black,on)
 
@@ -8,16 +8,16 @@ button_inactive_color = dialog_color
 button_key_inactive_color = dialog_color
 button_label_inactive_color = dialog_color
 
-button_active_color = (white,cyan,on)
+button_active_color = (white,blue,on)
 button_key_active_color = button_active_color
-button_label_active_color = (black,cyan,on)
-tag_key_selected_color = (white,cyan,on)
+button_label_active_color = (black,blue,on)
+tag_key_selected_color = (white,blue,on)
 item_selected_color = tag_key_selected_color
 
-form_text_color = (black,green,on)
-form_item_readonly_color = (green,black,on)
+form_text_color = (black,blue,on)
+form_item_readonly_color = (blue,black,on)
 
-itemhelp_color = (white,cyan,off)
+itemhelp_color = (white,blue,off)
 
 inputbox_color = dialog_color
 inputbox_border_color = dialog_color
