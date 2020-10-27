@@ -84,4 +84,6 @@ This script **should** be distro-agnostic, which means you can install *pinebook
 
 ## Credits
 
-Inspiration and code parts from:<BR> https://gitlab.manjaro.org/manjaro-arm/applications/manjaro-arm-installer<BR> https://github.com/nikhiljha/pp-fedora-sdsetup<BR> https://github.com/daniel-thompson/pinebook-pro-debian-installer.git
+Inspiration and code parts from:<BR>
+https://gitlab.manjaro.org/manjaro-arm/applications/manjaro-arm-installer<BR>
+https://github.com/nikhiljha/pp-fedora-sdsetup<BR>
