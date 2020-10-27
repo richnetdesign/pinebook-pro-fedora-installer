@@ -1,8 +1,10 @@
 # pinebook-pro-fedora-installer
 
-Scripts for installing Fedora aarch64 directly to SD/eMMC. The script will add copr repository for some extra packages needed on Pinebook Pro.<BR> copr: https://copr.fedorainfracloud.org/coprs/aptupdate/pinebook-pro/ source: https://github.com/bengtfredh/pinebook-pro-copr.git
+Scripts for installing Fedora aarch64 directly to SD/eMMC. The script will add copr repository for some extra packages needed on Pinebook Pro.<BR>
+copr: https://copr.fedorainfracloud.org/coprs/aptupdate/pinebook-pro/ <BR>
+source: https://github.com/bengtfredh/pinebook-pro-copr.git <BR>
 
-Script will install kernel-pbp from copr which is a vanilla kernel patched for Pinebook Pro with Manjaro config merged on Fedora config. You can chose to switch to linux-manjaro from same copr which is a rpm packages Manjaro aarch64 kernel. Biggest difference is kernel-pbp have SELINUX and btrfs build in kernel, linux-manjaro have no SELINUX and have btrfs as module.
+Script will install kernel-pbp from copr which is a vanilla kernel patched for Pinebook Pro with Manjaro config merged on Fedora config. You can chose to switch to linux-manjaro from same copr which is a rpm packaged Manjaro aarch64 kernel. Biggest difference is, kernel-pbp have SELINUX and btrfs build in kernel, linux-manjaro have no SELINUX and have btrfs as module.
 
 This script is "interactive". Meaning that it asks you questions when run to customize your install. Like username, password etc.
 
@@ -25,7 +27,7 @@ Runtime is approx 40-50 minutes for Fedora 33 Workstation depending on your band
 * polkit
 * btrfs-progs
 
-## Installing and using from gitlab:
+## Installing and using from github:
 
 To use this script, please make sure that the following is correct:
 
@@ -74,7 +76,7 @@ sudo bash ./fedora-installer
 
 * Fedora Workstation<BR>
 
-  <BR> There is no reason why this script should not work with other editions of Fedora. Just change FEDORAURL and FEDORARAW. Script os only tested with Fedora Workstation.
+There is no reason why this script should not work with other editions of Fedora. Just add url for release you want as parameter. Script os only tested with Fedora Workstation.
 
 ## Other notes:
 
