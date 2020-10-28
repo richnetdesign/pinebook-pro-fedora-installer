@@ -12,7 +12,7 @@ FEDORARAW="$(basename -s .xz "${FEDORAURL}")"
 TMPDIR=/var/tmp/fedora-installer
 ARCH='aarch64'
 CARCH=$(uname -m)
-NSPAWN='systemd-nspawn -q --resolv-conf=replace-host --timezone=off -D'
+NSPAWN='systemd-nspawn -q --bind-ro=/etc/resolv.conf:/etc/resolv.conf --timezone=off -D'
 
 # set colorscheme
 export DIALOGRC="./dialogrc_gui"
