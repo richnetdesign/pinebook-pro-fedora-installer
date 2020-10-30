@@ -119,21 +119,27 @@ install_fedora() {
     msg "Install Fedora from media..."
 	
     info "Making mount directories..."
-    mkdir -p $TMPDIR/imgfs/3
+    mkdir -p $TMPDIR/imgfs/{1,2,3}
 
     info "Mounting Fedora image..."
     losetup /dev/loop0 $TMPDIR/$FEDORARAW
     partprobe -s /dev/loop0
+    mount /dev/loop0p1 $TMPDIR/imgfs/1
+    mount /dev/loop0p2 $TMPDIR/imgfs/2
     mount /dev/loop0p3 $TMPDIR/imgfs/3
     info "Copying Fedora files (Approx 6,6 Gb)..."
     rsync -a --info=progress2 $TMPDIR/imgfs/3/root/* $TMPDIR/fedora/
+    rsync -a --info=progress2 $TMPDIR/imgfs/2/* $TMPDIR/fedora/boot
+    rsync -a --info=progress2 $TMPDIR/imgfs/1/* $TMPDIR/fedora/boot/efi
 
     info "Unmounting Fedora media..."
+    umount /dev/loop0p1
+    umount /dev/loop0p2
     umount /dev/loop0p3
     losetup -d /dev/loop0
 
     info "Deleting temp directories..."
-    rmdir $TMPDIR/imgfs/3
+    rmdir $TMPDIR/imgfs/{1,2,3}
     rmdir $TMPDIR/imgfs
 
     rm -rf $TMPDIR/$FEDORARAW*
@@ -145,9 +151,9 @@ upgrade_fedora() {
     mkdir -p $TMPDIR/dnf
     mount -o bind $TMPDIR/dnf $TMPDIR/fedora/var/cache/dnf
     
-    info "Remove package not in use..."
-    $NSPAWN $TMPDIR/fedora dnf remove -y kernel kernel-core kernel-modules grub2-common grub2-efi-aa64 grub2-tools grub2-tools-extra grub2-tools-minimal 1> /dev/null 2>&1
-    echo "excludepkgs=kernel.*,kernel-core*,kernel-modules*,grub2*" >> $TMPDIR/fedora/etc/dnf/dnf.conf
+#    info "Remove package not in use..."
+#    $NSPAWN $TMPDIR/fedora dnf remove -y kernel kernel-core kernel-modules grub2-common grub2-efi-aa64 grub2-tools grub2-tools-extra grub2-tools-minimal 1> /dev/null 2>&1
+#    echo "excludepkgs=kernel.*,kernel-core*,kernel-modules*,grub2*" >> $TMPDIR/fedora/etc/dnf/dnf.conf
     
     $NSPAWN $TMPDIR/fedora dnf upgrade -y --refresh
 
@@ -156,10 +162,11 @@ upgrade_fedora() {
     $NSPAWN $TMPDIR/fedora dnf update -y
 
     info "Install Pinebook Pro packages..."
-    $NSPAWN $TMPDIR/fedora dnf install -y kernel-pbp uboot-pinebookpro ap6256-firmware pbp-keyboard-hwdb pinebookpro-audio haveged
+    $NSPAWN $TMPDIR/fedora dnf install -y kernel-pbp uboot-pinebookpro haveged acpid ap6256-firmware pbp-keyboard-hwdb
     
     info "Enable services from extra packages..."
     $NSPAWN $TMPDIR/fedora systemctl enable haveged.service
+    $NSPAWN $TMPDIR/fedora systemctl enable acpid.service
 
     info "Clear dnf cache..."
     umount $TMPDIR/fedora/var/cache/dnf 
@@ -179,27 +186,32 @@ configure_fedora() {
     ROOTUUID=$(blkid -s UUID -o value "${SDCARD}${SDDEV}3")
 
     # Configure extlinux.conf
-if [ ! -f "${TMPDIR}/root/boot/extlinux/extlinux.conf" ]; then
-    mkdir ${TMPDIR}/root/boot/extlinux/ -p
-    echo "LABEL Fedora PinebookPro" > ${TMPDIR}/root/boot/extlinux/extlinux.conf 
-    echo "KERNEL /Image" >> ${TMPDIR}/root/boot/extlinux/extlinux.conf 
-    echo "FDT /dtbs/rockchip/rk3399-pinebook-pro.dtb" >> ${TMPDIR}/root/boot/extlinux/extlinux.conf 
-    echo "INITRD /initramfs-linux.img" >> ${TMPDIR}/root/boot/extlinux/extlinux.conf 
-    echo "APPEND console=tty1 console=ttyS2,1500000 root=UUID=${ROOTUUID} ro rootflags=subvol=root rhgb quiet" >> ${TMPDIR}/root/boot/extlinux/extlinux.conf 
+if [ ! -f "${TMPDIR}/fedora/boot/extlinux/extlinux.conf" ]; then
+    mkdir ${TMPDIR}/fedora/boot/extlinux/ -p
+    echo "LABEL Fedora PinebookPro" > ${TMPDIR}/fedora/boot/extlinux/extlinux.conf 
+    echo "KERNEL /Image" >> ${TMPDIR}/fedora/boot/extlinux/extlinux.conf 
+    echo "FDT /dtbs/rockchip/rk3399-pinebook-pro.dtb" >> ${TMPDIR}/fedora/boot/extlinux/extlinux.conf 
+    echo "INITRD /initramfs-linux.img" >> ${TMPDIR}/fedora/boot/extlinux/extlinux.conf 
+    echo "APPEND console=tty1 console=ttyS2,1500000 root=UUID=${ROOTUUID} rw rootflags=subvol=root rhgb quiet" >> ${TMPDIR}/fedora/boot/extlinux/extlinux.conf 
 
-elif [ grep -q ^INITRD "${TMPDIR}/root/boot/extlinux/extlinux.conf" ]; then
-    sed -i -e "s!APPEND.*!APPEND console=tty1 console=ttyS2,1500000 root=UUID=${ROOTUUID} ro rootflags=subvol=root rhgb quiet !g" ${TMPDIR}/root/boot/extlinux/extlinux.conf
+elif grep -qzw "INITRD" "${TMPDIR}/fedora/boot/extlinux/extlinux.conf"; then
+    sed -i -e "s!APPEND.*!APPEND console=tty1 console=ttyS2,1500000 root=UUID=${ROOTUUID} rw rootflags=subvol=root rhgb quiet !g" ${TMPDIR}/fedora/boot/extlinux/extlinux.conf
 
 else
-    sed -i -e "s!APPEND.*!APPEND initrd=/initramfs-linux.img console=tty1 console=ttyS2,1500000 root=UUID=${ROOTUUID} ro rootflags=subvol=root rhgb quiet !g" ${TMPDIR}/root/boot/extlinux/extlinux.conf
+    echo "INITRD /initramfs-linux.img" >> ${TMPDIR}/fedora/boot/extlinux/extlinux.conf
+    sed -i -e "s!APPEND.*!APPEND console=tty1 console=ttyS2,1500000 root=UUID=${ROOTUUID} rw rootflags=subvol=root rhgb quiet !g" ${TMPDIR}/fedora/boot/extlinux/extlinux.conf
 fi
 
     # Edit fstab
     echo "UUID=${ROOTUUID}	/   		btrfs	subvol=root			0 0" > $TMPDIR/fedora/etc/fstab
     echo "UUID=${BOOTUUID}	/boot		ext4	defaults			1 2" >> $TMPDIR/fedora/etc/fstab
-    echo "UUID=${EFIUUID}		/boot/efi	vfat	umask=0077,shortname=winnt	0 2" >> $TMPDIR/fedora/etc/fstab
+    echo "UUID=${EFIUUID}			/boot/efi	vfat	umask=0077,shortname=winnt	0 2" >> $TMPDIR/fedora/etc/fstab
     echo "UUID=${ROOTUUID}	/home   	btrfs	subvol=home			0 0" >> $TMPDIR/fedora/etc/fstab
     
+#Enable suspend
+sed -i "s/^action=.*/action=/g" $TMPDIR/fedora/etc/acpi/events/powerconf
+sed -i "s/^#SuspendState=.*/SuspendState=freeze/g" $TMPDIR/fedora/etc/systemd/sleep.conf
+
     info "Set timezone..."
     $NSPAWN $TMPDIR/fedora ln -sf /usr/share/zoneinfo/"$TIMEZONE" /etc/localtime 1> /dev/null 2>&1
     
@@ -242,7 +254,8 @@ partition_card () {
     msg "Getting $SDCARD ready for $DEVICE..."
     # umount SD card
     umount ${SDCARD}$* 1> /dev/null 2>&1
-    sleep 1
+    umount ${SDCARD}$* 1> /dev/null 2>&1
+    umount ${SDCARD}$* 1> /dev/null 2>&1
     wipefs -a ${SDCARD} 1> /dev/null 2>&1
 
     info "Create partitions on $DEV_NAME..."
@@ -265,10 +278,13 @@ format_card () {
 	
     mkdir -p $TMPDIR/fedora
     mount ${SDCARD}${SDDEV}3 $TMPDIR/fedora
+    sleep 1
     btrfs subvolume create $TMPDIR/fedora/root 1> /dev/null 2>&1
     btrfs subvolume create $TMPDIR/fedora/home 1> /dev/null 2>&1
     umount $TMPDIR/fedora
+    sleep 1
     mount -t btrfs -o subvol=root ${SDCARD}${SDDEV}3 $TMPDIR/fedora
+    sleep 1
     mkdir -p $TMPDIR/fedora/home
     mount -t btrfs -o subvol=home ${SDCARD}${SDDEV}3 $TMPDIR/fedora/home
     sleep 1
