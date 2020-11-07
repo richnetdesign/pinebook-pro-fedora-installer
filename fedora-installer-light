@@ -118,10 +118,12 @@ prepare_media() {
 install_fedora() {
     msg "Install Fedora..."
     info "Clear dnf cache..."
+    $NSPAWN $TMPDIR/fedora rpmdb --rebuilddb
     $NSPAWN $TMPDIR/fedora dnf clean all 1> /dev/null 2>&1
     mkdir -p $TMPDIR/dnf 1> /dev/null 2>&1
     mount -o bind $TMPDIR/dnf $TMPDIR/fedora/var/cache/dnf 1> /dev/null 2>&1
     info "Upgrade base install..."
+    $NSPAWN $TMPDIR/fedora rpmdb --rebuilddb
     $NSPAWN $TMPDIR/fedora dnf upgrade -y --refresh
 
     info "Configure Fedora Workstation release..."
