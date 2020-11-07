@@ -101,8 +101,8 @@ install_fedora() {
     msg "Install Fedora..."
 
     info "Install core system..."
-    dnf --forcearch=aarch64 --installroot=$TMPDIR/fedora --releasever=33 install system-release
-    dnf --forcearch=aarch64 --installroot=$TMPDIR/fedora --releasever=33 install @core --exclude=grub2*
+    dnf --forcearch=aarch64 --installroot=$TMPDIR/fedora --releasever=33 install -y system-release
+    dnf --forcearch=aarch64 --installroot=$TMPDIR/fedora --releasever=33 install -y @core --exclude=grub2*
     info "Install Fedora Workstation..."
     $NSPAWN $TMPDIR/fedora dnf install -y fedora-release-workstation --allowerasing -y
     $NSPAWN $TMPDIR/fedora dnf install -y @arm-tools @base-x @container-management @firefox @libreoffice @networkmanager-submodules @printing @workstation-product @gnome-desktop @multimedia @hardware-support --exclude=@dial-up,@input-methods,@standard,gfs2-utils,reiserfs-utils,initial-setup,initial-setup-gui,libvirt*,gnome-boxes
