@@ -4,8 +4,9 @@
 #       Version 4.0
 # *****************************
 
-#Fedora release version as parameter i.e 33
-RELEASEVER=${1:-33}
+# Fedora image read url as parameter
+FEDORAURL=${1:-"https://download.fedoraproject.org/pub/fedora/linux/releases/33/Container/aarch64/images/Fedora-Container-Base-33-1.2.aarch64.tar.xz"}
+FEDORABASE="$(basename "${FEDORAURL}")"
 
 # Set globals
 TMPDIR=/var/tmp/fedora-installer
@@ -45,7 +46,7 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # Sanity checks for dependencies
-declare -a DEPENDNECIES=("wipefs" "sed" "rsync" "systemd-nspawn" "dialog" "openssl" "awk" "mkfs.vfat" "btrfs")
+declare -a DEPENDNECIES=("wipefs" "bsdtar" "sed" "rsync" "systemd-nspawn" "dialog" "openssl" "awk" "mkfs.vfat" "btrfs")
 
 for i in "${DEPENDNECIES[@]}"; do
   if ! [[ -f "/bin/$i" || -f "/sbin/$i" || -f "/usr/bin/$i" || -f "/usr/sbin/$i" ]] ; then
@@ -100,24 +101,43 @@ show_elapsed_time(){
     msg "Time %s: %s minutes..." "$1" "$(elapsed_time $2)"
 }
 
+prepare_media() {
+    msg "Prepare source media..."
+    cd $TMPDIR
+    if [ ! -f "$FEDORABASE" ]; then
+    info "Downloading Fedora Image..."
+      wget -q --show-progress --progress=bar:force:noscroll "$FEDORAURL" || exit
+    fi
+    info "Extract base system..."
+    mkdir -p $TMPDIR/fedorabase 1> /dev/null 2>&1
+    bsdtar -xpf $TMPDIR/"$FEDORABASE" --strip-components=1 -C $TMPDIR/fedorabase 1> /dev/null 2>&1
+    bsdtar -xpf $TMPDIR/fedorabase/layer.tar -C $TMPDIR/fedora 1> /dev/null 2>&1
+    rm -rf $TMPDIR/fedorabase 1> /dev/null 2>&1
+}
+
 install_fedora() {
     msg "Install Fedora..."
+    info "Clear dnf cache..."
+    $NSPAWN $TMPDIR/fedora dnf clean all 1> /dev/null 2>&1
+    mkdir -p $TMPDIR/dnf 1> /dev/null 2>&1
+    mount -o bind $TMPDIR/dnf $TMPDIR/fedora/var/cache/dnf 1> /dev/null 2>&1
+    info "Upgrade base install..."
+    $NSPAWN $TMPDIR/fedora dnf upgrade -y --refresh
 
-    info "Install core system..."
-    dnf --forcearch=aarch64 --installroot=$TMPDIR/fedora --releasever=${releasever} install -y system-release
-    dnf --forcearch=aarch64 --installroot=$TMPDIR/fedora --releasever=${releasever} install -y @core --exclude=grub2*,grubby
-    info "Install Fedora Workstation..."
+    info "Configure Fedora Workstation release..."
     $NSPAWN $TMPDIR/fedora dnf install -y fedora-release-workstation --allowerasing -y
-    $NSPAWN $TMPDIR/fedora dnf install -y @arm-tools @base-x @container-management @firefox @libreoffice @networkmanager-submodules @printing @workstation-product @gnome-desktop @multimedia @hardware-support --exclude=@dial-up,@input-methods,@standard,gfs2-utils,reiserfs-utils,initial-setup,initial-setup-gui,libvirt*,gnome-boxes
+    info "Install Fedora Workstation..."
+    $NSPAWN $TMPDIR/fedora dnf install -y @core @arm-tools @base-x @container-management @firefox @libreoffice @networkmanager-submodules @printing @workstation-product @gnome-desktop @multimedia @hardware-support --exclude=@dial-up,@input-methods,@standard,gfs2-utils,reiserfs-utils,initial-setup,initial-setup-gui,libvirt*,gnome-boxes
     
-    info "Enable copr..."
+    info "Enable copr/aptupdate/pinebook-pro..."
     $NSPAWN $TMPDIR/fedora dnf copr enable -y aptupdate/pinebook-pro
     $NSPAWN $TMPDIR/fedora dnf makecache
 
     info "Install Pinebook Pro packages..."
-    $NSPAWN $TMPDIR/fedora dnf install -y kernel-pbp uboot-pinebookpro ap6256-firmware pbp-keyboard-hwdb
+    $NSPAWN $TMPDIR/fedora dnf install -y kernel-pbp uboot-pinebookpro ap6256-firmware pbp-keyboard-hwdb acpid pinebookpro-suspend
 
     info "Clear dnf cache..."
+    umount $TMPDIR/fedora/var/cache/dnf
     $NSPAWN $TMPDIR/fedora dnf clean all 1> /dev/null 2>&1
     
 }
@@ -127,7 +147,7 @@ configure_fedora() {
     info "Run SELinux autorelabel all files first boot..."
     touch $TMPDIR/fedora/.autorelabel
 
-    info "Update extlinux.conf and fstab with UUID..."
+    info "Update extlinux.conf with UUID..."
     # Get UUID
     EFIUUID=$(blkid -s UUID -o value "${SDCARD}${SDDEV}1")
     BOOTUUID=$(blkid -s UUID -o value "${SDCARD}${SDDEV}2")
@@ -139,17 +159,14 @@ configure_fedora() {
     echo "KERNEL /Image" >> ${TMPDIR}/fedora/boot/extlinux/extlinux.conf 
     echo "FDT /dtbs/rockchip/rk3399-pinebook-pro.dtb" >> ${TMPDIR}/fedora/boot/extlinux/extlinux.conf 
     echo "INITRD /initramfs-linux.img" >> ${TMPDIR}/fedora/boot/extlinux/extlinux.conf 
-    echo "APPEND console=tty1 console=ttyS2,1500000 root=UUID=${ROOTUUID} rw rootflags=subvol=root cma=256M rhgb quiet" >> ${TMPDIR}/fedora/boot/extlinux/extlinux.conf 
-
+    echo "APPEND console=tty1 console=ttyS2,1500000 root=UUID=${ROOTUUID} rw rootflags=subvol=root rhgb quiet" >> ${TMPDIR}/fedora/boot/extlinux/extlinux.conf 
+ 
+    info "Update fstab with UUID..."
     # Edit fstab
     echo "UUID=${ROOTUUID}	/   		btrfs	subvol=root			0 0" > $TMPDIR/fedora/etc/fstab
     echo "UUID=${BOOTUUID}	/boot		ext4	defaults			1 2" >> $TMPDIR/fedora/etc/fstab
     echo "UUID=${EFIUUID}			/boot/efi	vfat	umask=0077,shortname=winnt	0 2" >> $TMPDIR/fedora/etc/fstab
     echo "UUID=${ROOTUUID}	/home   	btrfs	subvol=home			0 0" >> $TMPDIR/fedora/etc/fstab
-    
-#Enable suspend
-#sed -i "s/^action=.*/action=/g" $TMPDIR/fedora/etc/acpi/events/powerconf
-sed -i "s/^#SuspendState=.*/SuspendState=freeze/g" $TMPDIR/fedora/etc/systemd/sleep.conf
 
     info "Set timezone..."
     $NSPAWN $TMPDIR/fedora ln -sf /usr/share/zoneinfo/"$TIMEZONE" /etc/localtime 1> /dev/null 2>&1
@@ -190,21 +207,22 @@ sed -i "s/^#SuspendState=.*/SuspendState=freeze/g" $TMPDIR/fedora/etc/systemd/sl
 }
 
 partition_card () {
-    msg "Getting $SDCARD ready for $DEVICE..."
-    # umount SD card
+    msg "Getting $SDCARD ready for formatting..."
+    # umount and clear SD card
     umount ${SDCARD}$* 1> /dev/null 2>&1
     umount ${SDCARD}$* 1> /dev/null 2>&1
     umount ${SDCARD}$* 1> /dev/null 2>&1
     wipefs -a ${SDCARD} 1> /dev/null 2>&1
+    echo -e "label:gpt" | sfdisk ${SDCARD} 1> /dev/null 2>&1
 
     info "Create partitions on $DEV_NAME..."
     #Clear first 32mb
     dd if=/dev/zero of=${SDCARD} bs=1M count=32 1> /dev/null 2>&1
 
-    #partition with efi, boot and root
+    info "Partition with efi, boot and root"
     echo -e "label:gpt\nunit:sectors\nfirst-lba:32768" | sfdisk ${SDCARD} 1> /dev/null 2>&1
     echo -e "n\n1\n32768\n+512M\nn\n2\n\n+1G\nn\n3\n\n\nt\n1\n1\nx\nA\n2\nr\nw" | fdisk ${SDCARD} 1> /dev/null 2>&1
-    
+    infor "List partitions..."
     partprobe -s ${SDCARD}
 
 }
@@ -216,37 +234,57 @@ format_card () {
     mkfs.btrfs -f "${SDCARD}${SDDEV}3" -L "<FS_TREE>" 1> /dev/null 2>&1
 	
     mkdir -p $TMPDIR/fedora
-    mount ${SDCARD}${SDDEV}3 $TMPDIR/fedora
+    mount ${SDCARD}${SDDEV}3 $TMPDIR/fedora || exit
     sleep 1
+    info "Create btrfs subvolumes..."
     btrfs subvolume create $TMPDIR/fedora/root 1> /dev/null 2>&1
     btrfs subvolume create $TMPDIR/fedora/home 1> /dev/null 2>&1
-    umount $TMPDIR/fedora
+    umount $TMPDIR/fedora || exit
     sleep 1
-    mount -t btrfs -o subvol=root ${SDCARD}${SDDEV}3 $TMPDIR/fedora
+    info "Mount all partitions..."
+    mount -t btrfs -o subvol=root ${SDCARD}${SDDEV}3 $TMPDIR/fedora || exit
     sleep 1
     mkdir -p $TMPDIR/fedora/home
-    mount -t btrfs -o subvol=home ${SDCARD}${SDDEV}3 $TMPDIR/fedora/home
+    mount -t btrfs -o subvol=home ${SDCARD}${SDDEV}3 $TMPDIR/fedora/home  || exit
     sleep 1
     mkdir -p $TMPDIR/fedora/boot
-    mount ${SDCARD}${SDDEV}2 $TMPDIR/fedora/boot
+    mount ${SDCARD}${SDDEV}2 $TMPDIR/fedora/boot  || exit
     sleep 1
     mkdir -p $TMPDIR/fedora/boot/efi
-    mount ${SDCARD}${SDDEV}1 $TMPDIR/fedora/boot/efi
+    mount ${SDCARD}${SDDEV}1 $TMPDIR/fedora/boot/efi || exit
 }
 
 cleanup () {
     msg "Writing bootloader and cleaning up after install..."
-    # Flash bootloader
+    info "Flash bootloader"
     dd if=$TMPDIR/fedora/boot/idbloader.img of=${SDCARD} seek=64 conv=notrunc,fsync 1> /dev/null 2>&1
     dd if=$TMPDIR/fedora/boot/u-boot.itb of=${SDCARD} seek=16384 conv=notrunc,fsync 1> /dev/null 2>&1
+
+    info "Apply workaround for poor key import UI in PackageKit"
+    $NSPAWN $TMPDIR/fedora rm -f /var/lib/rpm/__db* 1> /dev/null 2>&1
+    $NSPAWN $TMPDIR/fedora rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-$(rpm --eval '%{fedora}')-$arch 1> /dev/null 2>&1
+    echo "Packages within this ARM disk image"
+    $NSPAWN $TMPDIR/fedora rpm -qa --qf '%{size}\t%{name}-%{version}-%{release}.%{arch}\n' |sort -rn 1> /dev/null 2>&1
+    # Note that running rpm recreates the rpm db files which aren't needed or wanted
+    $NSPAWN $TMPDIR/fedora rm -f /var/lib/rpm/__db* 1> /dev/null 2>&1
+
+    info "Remove random seed, the new install should make it's own"
+    $NSPAWN $TMPDIR/fedora rm -f /var/lib/systemd/random-seed 1> /dev/null 2>&1
+    
+    info "Disabling tmpfs for /tmp."
+    $NSPAWN $TMPDIR/fedora systemctl mask tmp.mount 1> /dev/null 2>&1
+
+    info "Reset machine-id"
+    $NSPAWN $TMPDIR/fedora rm -f /etc/machine-id 1> /dev/null 2>&1
+    touch /etc/machine-id 1> /dev/null 2>&1
     	
     #clean up
-	umount $TMPDIR/fedora/boot/efi
-	umount $TMPDIR/fedora/boot
-	umount $TMPDIR/fedora/home
-	umount $TMPDIR/fedora
+	umount $TMPDIR/fedora/boot/efi 1> /dev/null 2>&1
+	umount $TMPDIR/fedora/boot 1> /dev/null 2>&1
+	umount $TMPDIR/fedora/home 1> /dev/null 2>&1
+	umount $TMPDIR/fedora 1> /dev/null 2>&1
 	partprobe $SDCARD 1> /dev/null 2>&1
-	rm -rf $TMPDIR
+	rm -rf $TMPDIR 1> /dev/null 2>&1
 }
 
 if [ ! -z "$EDITION" ]; then
@@ -470,6 +508,7 @@ timer_start=$(get_timer)
 
 partition_card
 format_card
+prepare_media
 install_fedora
 configure_fedora
 cleanup
