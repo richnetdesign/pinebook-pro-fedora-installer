@@ -224,7 +224,7 @@ partition_card () {
     info "Partition with efi, boot and root"
     echo -e "label:gpt\nunit:sectors\nfirst-lba:32768" | sfdisk ${SDCARD} 1> /dev/null 2>&1
     echo -e "n\n1\n32768\n+512M\nn\n2\n\n+1G\nn\n3\n\n\nt\n1\n1\nx\nA\n2\nr\nw" | fdisk ${SDCARD} 1> /dev/null 2>&1
-    infor "List partitions..."
+    info "List partitions..."
     partprobe -s ${SDCARD}
 
 }
