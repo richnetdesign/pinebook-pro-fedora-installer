@@ -12,7 +12,7 @@ FEDORABASE="$(basename "${FEDORAURL}")"
 TMPDIR=/var/tmp/fedora-installer
 ARCH='aarch64'
 CARCH=$(uname -m)
-NSPAWN='systemd-nspawn -q --bind-ro=/etc/resolv.conf --timezone=off -D'
+NSPAWN='systemd-nspawn -q --resolv-conf=auto --timezone=off -D'
 
 # set colorscheme
 export DIALOGRC="./dialogrc_gui"
@@ -46,7 +46,7 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # Sanity checks for dependencies
-declare -a DEPENDNECIES=("wipefs" "bsdtar" "sed" "rsync" "systemd-nspawn" "dialog" "openssl" "awk" "mkfs.vfat" "btrfs")
+declare -a DEPENDNECIES=("wipefs" "bsdtar" "sed" "rsync" "systemd-nspawn" "dialog" "openssl" "awk" "btrfs")
 
 for i in "${DEPENDNECIES[@]}"; do
   if ! [[ -f "/bin/$i" || -f "/sbin/$i" || -f "/usr/bin/$i" || -f "/usr/sbin/$i" ]] ; then
@@ -136,7 +136,7 @@ install_fedora() {
     $NSPAWN $TMPDIR/fedora dnf makecache
 
     info "Install Pinebook Pro packages..."
-    $NSPAWN $TMPDIR/fedora dnf install -y kernel-pbp uboot-pinebookpro ap6256-firmware pbp-keyboard-hwdb acpid pinebookpro-suspend
+    $NSPAWN $TMPDIR/fedora dnf install -y kernel-pbp uboot-pinebookpro ap6256-firmware pbp-keyboard-hwdb pinebookpro-suspend
 
     info "Clear dnf cache..."
     umount $TMPDIR/fedora/var/cache/dnf
@@ -151,9 +151,8 @@ configure_fedora() {
 
     info "Update extlinux.conf with UUID..."
     # Get UUID
-    EFIUUID=$(blkid -s UUID -o value "${SDCARD}${SDDEV}1")
-    BOOTUUID=$(blkid -s UUID -o value "${SDCARD}${SDDEV}2")
-    ROOTUUID=$(blkid -s UUID -o value "${SDCARD}${SDDEV}3")
+    BOOTUUID=$(blkid -s UUID -o value "${SDCARD}${SDDEV}1")
+    ROOTUUID=$(blkid -s UUID -o value "${SDCARD}${SDDEV}2")
 
     # Configure extlinux.conf
     mkdir ${TMPDIR}/fedora/boot/extlinux/ -p
@@ -167,7 +166,6 @@ configure_fedora() {
     # Edit fstab
     echo "UUID=${ROOTUUID}	/   		btrfs	subvol=root			0 0" > $TMPDIR/fedora/etc/fstab
     echo "UUID=${BOOTUUID}	/boot		ext4	defaults			1 2" >> $TMPDIR/fedora/etc/fstab
-    echo "UUID=${EFIUUID}			/boot/efi	vfat	umask=0077,shortname=winnt	0 2" >> $TMPDIR/fedora/etc/fstab
     echo "UUID=${ROOTUUID}	/home   	btrfs	subvol=home			0 0" >> $TMPDIR/fedora/etc/fstab
 
     info "Set timezone..."
@@ -223,7 +221,7 @@ partition_card () {
 
     info "Partition with efi, boot and root"
     echo -e "label:gpt\nunit:sectors\nfirst-lba:32768" | sfdisk ${SDCARD} 1> /dev/null 2>&1
-    echo -e "n\n1\n32768\n+512M\nn\n2\n\n+1G\nn\n3\n\n\nt\n1\n1\nx\nA\n2\nr\nw" | fdisk ${SDCARD} 1> /dev/null 2>&1
+    echo -e "n\n1\n32768\n+1G\nn\n2\n\n\nx\nA\n1\nr\nw" | fdisk ${SDCARD} 1> /dev/null 2>&1
     info "List partitions..."
     partprobe -s ${SDCARD}
 
@@ -231,12 +229,11 @@ partition_card () {
 
 format_card () {
     info "Format partitions on $DEV_NAME"
-    mkfs.vfat -F 32 "${SDCARD}${SDDEV}1" -n EFI 1> /dev/null 2>&1
-    mkfs.ext4 -F -O ^metadata_csum,^64bit "${SDCARD}${SDDEV}2" -L "${DEV_NAME}-boot" 1> /dev/null 2>&1
-    mkfs.btrfs -f "${SDCARD}${SDDEV}3" -L "<FS_TREE>" 1> /dev/null 2>&1
+    mkfs.ext4 -F -O ^metadata_csum,^64bit "${SDCARD}${SDDEV}1" -L "${DEV_NAME}-boot" 1> /dev/null 2>&1
+    mkfs.btrfs -f "${SDCARD}${SDDEV}2" -L "<FS_TREE>" 1> /dev/null 2>&1
 	
     mkdir -p $TMPDIR/fedora
-    mount ${SDCARD}${SDDEV}3 $TMPDIR/fedora || exit
+    mount ${SDCARD}${SDDEV}2 $TMPDIR/fedora || exit
     sleep 1
     info "Create btrfs subvolumes..."
     btrfs subvolume create $TMPDIR/fedora/root 1> /dev/null 2>&1
@@ -244,16 +241,15 @@ format_card () {
     umount $TMPDIR/fedora || exit
     sleep 1
     info "Mount all partitions..."
-    mount -t btrfs -o subvol=root ${SDCARD}${SDDEV}3 $TMPDIR/fedora || exit
+    mount -t btrfs -o subvol=root ${SDCARD}${SDDEV}2 $TMPDIR/fedora || exit
     sleep 1
     mkdir -p $TMPDIR/fedora/home
-    mount -t btrfs -o subvol=home ${SDCARD}${SDDEV}3 $TMPDIR/fedora/home  || exit
+    mount -t btrfs -o subvol=home ${SDCARD}${SDDEV}2 $TMPDIR/fedora/home  || exit
     sleep 1
     mkdir -p $TMPDIR/fedora/boot
-    mount ${SDCARD}${SDDEV}2 $TMPDIR/fedora/boot  || exit
+    mount ${SDCARD}${SDDEV}1 $TMPDIR/fedora/boot  || exit
     sleep 1
-    mkdir -p $TMPDIR/fedora/boot/efi
-    mount ${SDCARD}${SDDEV}1 $TMPDIR/fedora/boot/efi || exit
+
 }
 
 cleanup () {
@@ -281,7 +277,6 @@ cleanup () {
     touch /etc/machine-id 1> /dev/null 2>&1
     	
     #clean up
-	umount $TMPDIR/fedora/boot/efi 1> /dev/null 2>&1
 	umount $TMPDIR/fedora/boot 1> /dev/null 2>&1
 	umount $TMPDIR/fedora/home 1> /dev/null 2>&1
 	umount $TMPDIR/fedora 1> /dev/null 2>&1
@@ -391,9 +386,9 @@ else
 	exit 1
 fi
 
-	if [[ "$SDTYP" = "sd" || "$SDTYP" = "vd" ]]; then
+if [[ "$SDTYP" = "sd" || "$SDTYP" = "vd" ]]; then
 	SDDEV=""
-elif [[ "$SDTYP" = "mm" ]]; then
+elif [[ "$SDTYP" = "mm" || "$SDTYP" = "lo" ]]; then
 	SDDEV="p"
 elif [[ "$SDTYP" = "nv" ]]; then
 	SDDEV="n1p"
