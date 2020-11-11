@@ -129,7 +129,7 @@ install_fedora() {
     info "Configure Fedora Workstation release..."
     $NSPAWN $TMPDIR/fedora dnf install -y fedora-release-workstation --allowerasing -y
     info "Install Fedora Workstation..."
-    $NSPAWN $TMPDIR/fedora dnf install -y @core @arm-tools @base-x @container-management @firefox @libreoffice @networkmanager-submodules @printing @workstation-product @gnome-desktop @multimedia @hardware-support --exclude=@dial-up,@input-methods,@standard,gfs2-utils,reiserfs-utils,initial-setup,initial-setup-gui,libvirt*,gnome-boxes
+    $NSPAWN $TMPDIR/fedora dnf install -y @core @arm-tools @base-x @container-management @firefox @libreoffice @networkmanager-submodules @printing @workstation-product @gnome-desktop @multimedia @hardware-support --exclude=@dial-up,@input-methods,@standard,gfs2-utils,reiserfs-utils,initial-setup,initial-setup-gui,libvirt*,gnome-boxes,grub2-*,grubby
     
     info "Enable copr/aptupdate/pinebook-pro..."
     $NSPAWN $TMPDIR/fedora dnf copr enable -y aptupdate/pinebook-pro
